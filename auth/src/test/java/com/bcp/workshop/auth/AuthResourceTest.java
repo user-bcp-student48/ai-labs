@@ -2,8 +2,8 @@ package com.bcp.workshop.auth;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.quarkus.test.junit.QuarkusMock;
 import io.quarkus.test.junit.QuarkusTest;
-import jakarta.ws.rs.core.Response;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 
@@ -14,7 +14,6 @@ import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.util.Base64;
-import java.util.Map;
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
 
@@ -37,6 +36,17 @@ class AuthResourceTest {
     private static final String DATABASE_URL = System.getenv().getOrDefault(
             "AUTH_DB_URL", "jdbc:sqlite:./data/workshop.db");
     private boolean quotedFixtureInserted;
+
+    @Test
+    void reportsHealthWithoutAuthentication() {
+        given()
+                .accept("application/json")
+                .when().get("/q/health")
+                .then()
+                .statusCode(200)
+                .body("status", is("UP"))
+                .body("checks.size()", is(0));
+    }
 
     @Test
     void logsInWithWorkshopUser() {
@@ -81,6 +91,50 @@ class AuthResourceTest {
         given()
                 .contentType("application/json")
                 .body("{\"username\":\"student\"}")
+                .when().post("/auth/login")
+                .then()
+                .statusCode(400)
+                .body("message", is("Password is required"));
+    }
+
+    @Test
+    void rejectsBlankUsername() {
+        given()
+                .contentType("application/json")
+                .body("{\"username\":\"  \",\"password\":\"Workshop123!\"}")
+                .when().post("/auth/login")
+                .then()
+                .statusCode(400)
+                .body("message", is("Username is required"));
+    }
+
+    @Test
+    void rejectsEmptyUsername() {
+        given()
+                .contentType("application/json")
+                .body("{\"username\":\"\",\"password\":\"Workshop123!\"}")
+                .when().post("/auth/login")
+                .then()
+                .statusCode(400)
+                .body("message", is("Username is required"));
+    }
+
+    @Test
+    void rejectsBlankPassword() {
+        given()
+                .contentType("application/json")
+                .body("{\"username\":\"student\",\"password\":\"  \"}")
+                .when().post("/auth/login")
+                .then()
+                .statusCode(400)
+                .body("message", is("Password is required"));
+    }
+
+    @Test
+    void rejectsEmptyPassword() {
+        given()
+                .contentType("application/json")
+                .body("{\"username\":\"student\",\"password\":\"\"}")
                 .when().post("/auth/login")
                 .then()
                 .statusCode(400)
@@ -177,35 +231,35 @@ class AuthResourceTest {
 
     @Test
     void returnsGenericErrorWhenAuthenticationFailsUnexpectedly() {
-        AuthResource resource = new AuthResource();
-        resource.authService = new AuthService() {
+        QuarkusMock.installMockForType(new AuthService() {
             @Override
             public LoginResponse login(String username, String password) {
                 throw new IllegalStateException("internal-test-detail");
             }
-        };
-        LoginRequest request = new LoginRequest();
-        request.username = "fixture-user";
-        request.password = "FixturePass123!";
+        }, AuthService.class);
 
-        try (Response response = resource.login(request)) {
-            Map<?, ?> entity = (Map<?, ?>) response.getEntity();
-            assertEquals(500, response.getStatus());
-            assertEquals("Internal server error", entity.get("message"));
-            assertFalse(entity.containsKey("exception"));
-            assertFalse(entity.containsValue("internal-test-detail"));
-        }
+        String responseBody = given()
+                .contentType("application/json")
+                .body("{\"username\":\"fixture-user\",\"password\":\"FixturePass123!\"}")
+                .when().post("/auth/login")
+                .then()
+                .statusCode(500)
+                .body("message", is("Internal server error"))
+                .body("exception", org.hamcrest.Matchers.nullValue())
+                .body("debug", org.hamcrest.Matchers.nullValue())
+                .extract().asString();
+        assertFalse(responseBody.contains("internal-test-detail"));
     }
 
     @Test
-    void returnsBadRequestForNullRequest() {
-        AuthResource resource = new AuthResource();
-
-        try (Response response = resource.login(null)) {
-            Map<?, ?> entity = (Map<?, ?>) response.getEntity();
-            assertEquals(400, response.getStatus());
-            assertEquals("Request is null", entity.get("message"));
-        }
+    void returnsBadRequestForNullRequestOverHttp() {
+        given()
+                .contentType("application/json")
+                .body("null")
+                .when().post("/auth/login")
+                .then()
+                .statusCode(400)
+                .body("message", is("Request is null"));
     }
 
     @AfterEach
