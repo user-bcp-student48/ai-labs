@@ -269,6 +269,13 @@ dependencias sin evidencia y justificación.
   de perfil. No se modificó código ni se volvieron a ejecutar pruebas durante
   esta revisión. El seguimiento y plan son archivos sin seguimiento, por lo
   que no tienen diff contra `main`.
+- **Verificación documental posterior (2026-10-26, H-AUTH-02):** al preparar
+  `docs/ENDPOINTS.md`, la lectura actual de `application.properties:4` mostró
+  que `auth.token.secret` vuelve a estar configurado con un literal, aunque
+  una lectura anterior durante la misma tarea lo mostraba referenciado a
+  `AUTH_TOKEN_SECRET`. El archivo no figuraba modificado en `git status`; se
+  documentó la configuración efectivamente leída, sin copiar su valor, y
+  H-AUTH-02 se dejó `Pendiente`. No se editó código en este paso.
 - **Corrección de los bloqueantes (2026-10-26, H-AUTH-02 y H-AUTH-08):** se
   retiró el fallback de secreto, se añadió validación de inicio y se restringió
   la creación/autenticación de cuentas demo por entorno. El primer intento de
