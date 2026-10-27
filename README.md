@@ -41,7 +41,7 @@ Necesitas Docker con Compose y el motor iniciado. Podman Compose es otra opción
 docker compose up --build
 ```
 
-Abre http://localhost:4200. Usuario ficticio student, contraseña Workshop123!. Autenticación publica http://localhost:8080/q/health y la API http://localhost:8000/docs. La primera ejecución descarga imágenes y dependencias. Espera a que los tres servicios respondan: el orden de arranque no certifica que estén listos.
+Abre http://localhost:4200. El backend de autenticación en Compose usa la configuración de producción y no crea cuentas demo. Para probar el login demo en desarrollo, define `AUTH_DEMO_USERS_STUDENT_PASSWORD` y `AUTH_DEMO_USERS_TRAINER_PASSWORD` antes de iniciar auth con `python tools/lab.py start auth`. Autenticación publica http://localhost:8080/q/health y la API http://localhost:8000/docs. La primera ejecución descarga imágenes y dependencias. Espera a que los tres servicios respondan: el orden de arranque no certifica que estén listos.
 
 En otra terminal puedes ver el estado y la salida:
 
