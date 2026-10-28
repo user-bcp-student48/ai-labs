@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.quarkus.test.junit.QuarkusMock;
 import io.quarkus.test.junit.QuarkusTest;
+import io.quarkus.test.junit.TestProfile;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 
@@ -14,6 +15,7 @@ import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.util.Base64;
+import java.util.Map;
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
 
@@ -28,6 +30,7 @@ import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.hamcrest.Matchers.nullValue;
 
 @QuarkusTest
+@TestProfile(AuthDemoUsersTestProfile.class)
 class AuthResourceTest {
     private static final String QUOTED_USERNAME = "fixture'user";
     private static final String QUOTED_PASSWORD = "FixturePass123!";
@@ -52,7 +55,10 @@ class AuthResourceTest {
     void logsInWithWorkshopUser() {
         given()
                 .contentType("application/json")
-                .body("{\"username\":\"student\",\"password\":\"Workshop123!\",\"client\":\"angular-workshop\"}")
+                .body(Map.of(
+                        "username", "student",
+                        "password", AuthDemoUsersTestProfile.STUDENT_PASSWORD,
+                        "client", "angular-workshop"))
                 .when().post("/auth/login")
                 .then()
                 .statusCode(200)
@@ -79,7 +85,7 @@ class AuthResourceTest {
     void rejectsMissingUsername() {
         given()
                 .contentType("application/json")
-                .body("{\"password\":\"Workshop123!\"}")
+                .body("{\"password\":\"unused-test-input\"}")
                 .when().post("/auth/login")
                 .then()
                 .statusCode(400)
@@ -101,7 +107,7 @@ class AuthResourceTest {
     void rejectsBlankUsername() {
         given()
                 .contentType("application/json")
-                .body("{\"username\":\"  \",\"password\":\"Workshop123!\"}")
+                .body("{\"username\":\"  \",\"password\":\"unused-test-input\"}")
                 .when().post("/auth/login")
                 .then()
                 .statusCode(400)
@@ -112,7 +118,7 @@ class AuthResourceTest {
     void rejectsEmptyUsername() {
         given()
                 .contentType("application/json")
-                .body("{\"username\":\"\",\"password\":\"Workshop123!\"}")
+                .body("{\"username\":\"\",\"password\":\"unused-test-input\"}")
                 .when().post("/auth/login")
                 .then()
                 .statusCode(400)
@@ -159,7 +165,9 @@ class AuthResourceTest {
     void migratesLegacyPasswordToSaltedHashOnSuccessfulLogin() throws Exception {
         given()
                 .contentType("application/json")
-                .body("{\"username\":\"student\",\"password\":\"Workshop123!\"}")
+                .body(Map.of(
+                        "username", "student",
+                        "password", AuthDemoUsersTestProfile.STUDENT_PASSWORD))
                 .when().post("/auth/login")
                 .then()
                 .statusCode(200);
@@ -172,7 +180,7 @@ class AuthResourceTest {
                 assertTrue(result.next());
                 String storedPassword = result.getString("password");
                 assertTrue(storedPassword.startsWith("pbkdf2-sha256$"));
-                assertNotEquals("Workshop123!", storedPassword);
+                assertNotEquals(AuthDemoUsersTestProfile.STUDENT_PASSWORD, storedPassword);
             }
         }
     }
@@ -181,7 +189,9 @@ class AuthResourceTest {
     void createsSignedTokenWithExplicitClaims() throws Exception {
         String token = given()
                 .contentType("application/json")
-                .body("{\"username\":\"student\",\"password\":\"Workshop123!\"}")
+                .body(Map.of(
+                        "username", "student",
+                        "password", AuthDemoUsersTestProfile.STUDENT_PASSWORD))
                 .when().post("/auth/login")
                 .then()
                 .statusCode(200)

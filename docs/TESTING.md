@@ -46,7 +46,11 @@ Las pruebas ejecutables están en
   `migratesLegacyPasswordToSaltedHashOnSuccessfulLogin`.
 - `UserRepositoryTest.java`: `doesNotSeedOrAuthenticateDemoUsersWhenDisabled`
   comprueba que las cuentas demo no se crean ni autentican con la opción
-  desactivada (H-AUTH-08).
+  desactivada (H-AUTH-08); `requiresNonblankExternalPasswordWhenDemoSeedingIsEnabled`
+  comprueba que el sembrado no inicia con la configuración de password ausente
+  o en blanco (H-AUTH-09).
+- `AuthDemoUsersTestProfile.java`: configura fixtures aislados para las pruebas
+  HTTP; no se incluyen en el artefacto de producción.
 - `SignedTokenServiceTest.java`: valida secreto ausente y de longitud
   insuficiente; `AuthResourceTest.createsSignedTokenWithExplicitClaims`
   comprueba firma, claims y expiración (H-AUTH-02).
@@ -69,30 +73,31 @@ del puerto 8081.
 | Baseline antes de ampliar pruebas | PowerShell: `$env:AUTH_DB_URL='jdbc:sqlite:./target/auth-docs-test.db'; mvn test '-Dquarkus.http.test-port=0'` | 0 | PASS: 20 pruebas, 0 fallos, 0 errores, 0 omitidas. |
 | Suite ampliada inicial | PowerShell: `$env:AUTH_DB_URL='jdbc:sqlite:./target/auth-endpoint-tests.db'; mvn test '-Dquarkus.http.test-port=0'` | 0 | PASS: 23 pruebas, 0 fallos, 0 errores, 0 omitidas. |
 | Verificación final con JaCoCo | PowerShell: `$env:AUTH_DB_URL='jdbc:sqlite:./target/auth-endpoint-final.db'; mvn verify '-Dquarkus.http.test-port=0'` | 0 | PASS: 25 pruebas, 0 fallos, 0 errores, 0 omitidas; compilación, empaquetado y reporte JaCoCo correctos. |
+| Baseline H-AUTH-09 | PowerShell: `$env:AUTH_DB_URL='jdbc:sqlite:./target/auth-hu-demo-baseline.db'; mvn verify '-Dquarkus.http.test-port=0'` | 0 | PASS: 25 pruebas, 0 fallos, 0 errores, 0 omitidas. |
+| Verificación H-AUTH-09 | PowerShell: `$env:AUTH_DB_URL='jdbc:sqlite:./target/auth-hu-demo-pr.db'; mvn verify '-Dquarkus.http.test-port=0'` | 0 | PASS: 26 pruebas, 0 fallos, 0 errores, 0 omitidas; compilación, empaquetado y reporte JaCoCo correctos. |
 
-La verificación final reportó estas suites:
+La verificación H-AUTH-09 reportó estas suites:
 
 | suite | pruebas | fallos | errores | omitidas |
 |---|---:|---:|---:|---:|
 | `AuthResourceTest` | 16 | 0 | 0 | 0 |
 | `PasswordHasherTest` | 6 | 0 | 0 | 0 |
 | `SignedTokenServiceTest` | 2 | 0 | 0 | 0 |
-| `UserRepositoryTest` | 1 | 0 | 0 | 0 |
-| **Total** | **25** | **0** | **0** | **0** |
+| `UserRepositoryTest` | 2 | 0 | 0 | 0 |
+| **Total** | **26** | **0** | **0** | **0** |
 
 ### Cobertura
 
 Medición: JaCoCo Maven Plugin 0.8.12 durante `mvn verify`; métrica de líneas
 tomada de `auth/target/site/jacoco/jacoco.xml`. La tabla resume el paquete de
-producción de auth (las modificaciones de esta tarea fueron en tests, no en
-código productivo).
+producción de auth después del cambio H-AUTH-09.
 
 | alcance/clase | líneas cubiertas | total de líneas | cobertura |
 |---|---:|---:|---:|
-| auth, paquete agregado | 149 | 159 | 93.7% |
+| auth, paquete agregado | 164 | 173 | 94.8% |
 | `AuthResource` | 20 | 20 | 100% |
 | `AuthService` | 19 | 19 | 100% |
-| `UserRepository` | 51 | 55 | 92.7% |
+| `UserRepository` | 63 | 66 | 95.5% |
 | `PasswordHasher` | 31 | 33 | 93.9% |
 | `SignedTokenService` | 20 | 24 | 83.3% |
 
@@ -102,9 +107,17 @@ gate para alcanzar el resultado agregado.
 
 ### Fallos, pendientes y pruebas propuestas
 
-**Fallos:** no hubo fallos, errores ni pruebas omitidas en la verificación
-final. La prueba sintética de error 500 genera de forma intencional una entrada
+**Fallos:** la primera ejecución del helper `python tools/lab.py test auth`
+falló porque el puerto 8081 ya estaba ocupado. El baseline se repitió con
+`mvn verify '-Dquarkus.http.test-port=0'` y pasó. Un intento intermedio de la
+suite modificada falló durante el descubrimiento de JUnit porque el perfil de
+test no tenía constructor público; se corrigió y la verificación final pasó.
+La prueba sintética de error 500 genera de forma intencional una entrada
 `ERROR` en el log para validar que el detalle no llega al cliente.
+
+**Comprobación de artefacto H-AUTH-09:** una inspección recursiva de los JARs y
+archivos en `auth/target/quarkus-app/` y del JAR de producción confirmó que no
+contienen passwords demo ni fixtures de test.
 
 **Pendientes:**
 

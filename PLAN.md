@@ -260,6 +260,31 @@ dependencias sin evidencia y justificación.
   `AUTH_TOKEN_SECRET`; las cuentas de demo preexistentes no se borran para no
   destruir datos, pero quedan bloqueadas para login con esta configuración.
 
+### H-AUTH-09 — Externalizar las contraseñas de demostración
+
+- **Hallazgo aprobado:** las contraseñas demo estaban declaradas en
+  `UserRepository` y podían quedar empaquetadas en el artefacto.
+- **Decisión aprobada:** los passwords demo se suministran por variables de
+  entorno (`AUTH_DEMO_USERS_STUDENT_PASSWORD` y
+  `AUTH_DEMO_USERS_TRAINER_PASSWORD`); no se incluyen valores por defecto en
+  la configuración versionada. Los tests usan fixtures aislados.
+- **Cambio aplicado:** el repositorio recibe propiedades opcionales y exige
+  valores no vacíos solo cuando el sembrado demo está habilitado. Se conserva
+  la desactivación en prod, el rechazo de nombres reservados y el contrato de
+  `POST /auth/login`. README y documentación del endpoint ya no publican
+  passwords demo.
+- **Verificación (2026-10-27):** desde `auth/`, con SQLite aislado en
+  `target/auth-hu-demo-pr.db` y puerto de test aleatorio,
+  `mvn verify '-Dquarkus.http.test-port=0'` terminó con código 0: 26 pruebas,
+  0 fallos, 0 errores, 0 omitidas. JaCoCo cubrió 63/66 líneas
+  de `UserRepository` (95.5%) y 164/173 del paquete auth (94.8%). La inspección
+  de `target/quarkus-app/` y del JAR de producción no encontró passwords demo
+  ni fixtures de test.
+- **Riesgo residual:** el perfil dev requiere que se definan ambos valores
+  externos antes del arranque; el arranque falla con un mensaje que identifica
+  la propiedad faltante, sin revelar passwords. El backend de Compose usa prod
+  y no crea cuentas demo.
+
 ### Validación y decisiones pendientes
 
 - **Revisión local de cierre (2026-10-26):** basada en `git diff main --

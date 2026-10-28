@@ -14,18 +14,25 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.util.Optional;
 import java.util.Set;
 
 @ApplicationScoped
 public class UserRepository {
+    private static final String STUDENT_PASSWORD_PROPERTY = "auth.demo-users.student-password";
+    private static final String TRAINER_PASSWORD_PROPERTY = "auth.demo-users.trainer-password";
     private static final String STUDENT_USERNAME = "student";
-    private static final String STUDENT_PASSWORD = "Workshop123!";
     private static final String TRAINER_USERNAME = "trainer";
-    private static final String TRAINER_PASSWORD = "Trainer123!";
     private static final Set<String> DEMO_USERNAMES = Set.of(STUDENT_USERNAME, TRAINER_USERNAME);
 
     @ConfigProperty(name = "auth.database.url")
     String databaseUrl;
+
+    @ConfigProperty(name = STUDENT_PASSWORD_PROPERTY)
+    Optional<String> studentPassword;
+
+    @ConfigProperty(name = TRAINER_PASSWORD_PROPERTY)
+    Optional<String> trainerPassword;
 
     @ConfigProperty(name = "auth.demo-users.enabled", defaultValue = "false")
     boolean demoUsersEnabled;
@@ -101,8 +108,23 @@ public class UserRepository {
     }
 
     private void seedDemoUsers() throws SQLException {
-        seedUser(STUDENT_USERNAME, STUDENT_PASSWORD, "Workshop Student", "STUDENT");
-        seedUser(TRAINER_USERNAME, TRAINER_PASSWORD, "Workshop Trainer", "TRAINER");
+        seedUser(
+                STUDENT_USERNAME,
+                requireDemoPassword(studentPassword, STUDENT_PASSWORD_PROPERTY),
+                "Workshop Student",
+                "STUDENT");
+        seedUser(
+                TRAINER_USERNAME,
+                requireDemoPassword(trainerPassword, TRAINER_PASSWORD_PROPERTY),
+                "Workshop Trainer",
+                "TRAINER");
+    }
+
+    private static String requireDemoPassword(Optional<String> password, String propertyName) {
+        return password
+                .filter(value -> !value.isBlank())
+                .orElseThrow(() -> new IllegalStateException(
+                        "Demo user seeding requires configuration property " + propertyName));
     }
 
     private static boolean isDemoUsername(String username) {

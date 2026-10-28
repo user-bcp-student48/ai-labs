@@ -84,15 +84,19 @@ como credencial.
    ```json
    {
      "username": "student",
-     "password": "Workshop123!",
+     "password": "<valor configurado localmente; no incluido aquí>",
      "client": "angular-workshop"
    }
    ```
 
    Evidencia de los campos: `auth/src/main/java/com/bcp/workshop/auth/LoginRequest.java:3-7`.
    Validación: `auth/src/main/java/com/bcp/workshop/auth/AuthService.java:36-42`.
-   El usuario de demostración está habilitado en dev/test, no en prod:
+   El sembrado de cuentas demo está habilitado en dev/test, no en prod:
    `auth/src/main/resources/application.properties:7-9`.
+   En desarrollo, define `AUTH_DEMO_USERS_STUDENT_PASSWORD` y
+   `AUTH_DEMO_USERS_TRAINER_PASSWORD` en el entorno antes de iniciar el backend.
+   No hay contraseñas demo predeterminadas en la configuración versionada;
+   las pruebas proporcionan valores fixture aislados.
 
 4. **Response exitosa:** HTTP 200. Los campos se construyen en
    `auth/src/main/java/com/bcp/workshop/auth/LoginResponse.java:3` y
