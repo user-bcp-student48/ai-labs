@@ -48,8 +48,20 @@ Las pruebas ejecutables están en
   comprueba que las cuentas demo no se crean ni autentican con la opción
   desactivada (H-AUTH-08).
 - `SignedTokenServiceTest.java`: valida secreto ausente y de longitud
-  insuficiente; `AuthResourceTest.createsSignedTokenWithExplicitClaims`
-  comprueba firma, claims y expiración (H-AUTH-02).
+  insuficiente; ahora también fija el límite inclusivo de 32 bytes UTF-8 y
+  comprueba que el rechazo no divulga un secreto corto. `AuthResourceTest`
+  protege el contrato de login y JWT de H-AUTH-02:
+  `logsInWithWorkshopUser` verifica HTTP 200 y los campos de respuesta;
+  `createsSignedTokenWithExplicitClaims` verifica HS256, `sub`, `role`, `exp`,
+  expiración y firma con la fixture; `rejectsInvalidCredentials` verifica HTTP
+  401 y su mensaje; las pruebas `rejectsMissingUsername`,
+  `rejectsMissingPassword`, `rejectsBlankUsername`, `rejectsEmptyUsername`,
+  `rejectsBlankPassword` y `rejectsEmptyPassword` verifican HTTP 400 y los
+  mensajes actuales. En `SignedTokenServiceTest`,
+  `rejectsMissingSigningSecret` fija el rechazo con diagnóstico genérico,
+  `rejectsSigningSecretShorterThanMinimumLength` fija el rechazo de 31 bytes
+  sin incluir el valor, y `acceptsSigningSecretWithExactlyThirtyTwoUtf8Bytes`
+  fija la aceptación del límite exacto.
 - `PasswordHasherTest.java`: casos unitarios del hash usados como regresión
   asociada a H-AUTH-03.
 
@@ -69,6 +81,9 @@ del puerto 8081.
 | Baseline antes de ampliar pruebas | PowerShell: `$env:AUTH_DB_URL='jdbc:sqlite:./target/auth-docs-test.db'; mvn test '-Dquarkus.http.test-port=0'` | 0 | PASS: 20 pruebas, 0 fallos, 0 errores, 0 omitidas. |
 | Suite ampliada inicial | PowerShell: `$env:AUTH_DB_URL='jdbc:sqlite:./target/auth-endpoint-tests.db'; mvn test '-Dquarkus.http.test-port=0'` | 0 | PASS: 23 pruebas, 0 fallos, 0 errores, 0 omitidas. |
 | Verificación final con JaCoCo | PowerShell: `$env:AUTH_DB_URL='jdbc:sqlite:./target/auth-endpoint-final.db'; mvn verify '-Dquarkus.http.test-port=0'` | 0 | PASS: 25 pruebas, 0 fallos, 0 errores, 0 omitidas; compilación, empaquetado y reporte JaCoCo correctos. |
+| Baseline Issue #23, antes de ampliar caracterización | PowerShell desde `auth/`: `$env:AUTH_DB_URL='jdbc:sqlite:./target/auth-issue23-baseline.db'; mvn test '-Dquarkus.http.test-port=0'` | 0 | PASS: 25 pruebas, 0 fallos, 0 errores, 0 omitidas. |
+| Caracterización del límite del secreto | PowerShell desde `auth/`: `$env:AUTH_DB_URL='jdbc:sqlite:./target/auth-issue23-characterization.db'; mvn '-Dtest=SignedTokenServiceTest' test '-Dquarkus.http.test-port=0'` | 0 | PASS: 3 pruebas, 0 fallos, 0 errores, 0 omitidas. |
+| Suite completa tras caracterización Issue #23 | PowerShell desde `auth/`: `$env:AUTH_DB_URL='jdbc:sqlite:./target/auth-issue23-final.db'; mvn test '-Dquarkus.http.test-port=0'` | 0 | PASS: 26 pruebas, 0 fallos, 0 errores, 0 omitidas. |
 
 La verificación final reportó estas suites:
 

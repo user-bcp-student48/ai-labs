@@ -4,6 +4,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.annotation.PostConstruct;
 import jakarta.enterprise.context.ApplicationScoped;
+import io.quarkus.runtime.Startup;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 
 import javax.crypto.Mac;
@@ -15,6 +16,7 @@ import java.util.Base64;
 import java.util.Map;
 
 @ApplicationScoped
+@Startup
 public class SignedTokenService {
     private static final String SIGNING_ALGORITHM = "HmacSHA256";
     private static final String TOKEN_ALGORITHM = "HS256";
@@ -55,13 +57,17 @@ public class SignedTokenService {
 
     private String sign(String signingInput) {
         try {
-            Mac mac = Mac.getInstance(SIGNING_ALGORITHM);
+            Mac mac = newSigningMac();
             byte[] secretBytes = secret.getBytes(StandardCharsets.UTF_8);
             mac.init(new SecretKeySpec(secretBytes, SIGNING_ALGORITHM));
             return ENCODER.encodeToString(mac.doFinal(signingInput.getBytes(StandardCharsets.US_ASCII)));
         } catch (GeneralSecurityException error) {
             throw new IllegalStateException("Unable to sign authentication token", error);
         }
+    }
+
+    Mac newSigningMac() throws GeneralSecurityException {
+        return Mac.getInstance(SIGNING_ALGORITHM);
     }
 
     private void validateSecret() {
