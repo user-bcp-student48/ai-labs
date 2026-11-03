@@ -1,0 +1,9 @@
+## api
+
+1. Analiza el flujo completo de las rutas, la lógica de negocio y la persistencia antes de cambiar la API.
+2. Conserva los endpoints, códigos de estado y formatos usados por el frontend.
+3. Crea pruebas de caracterización antes de separar rutas, servicios o acceso a datos.
+4. Mantén las consultas parametrizadas y la autorización ligada a la identidad; no ocultes hallazgos con `# noqa` ni exclusiones de scanners.
+5. Valida los archivos subidos —nombre, tamaño y extensión— y usa datos de prueba aislados; no agregues secretos reales ni valores de producción.
+6. Separa rutas, servicios, repositorios y serialización en cambios revisables.
+7. Meta de cobertura del código modificado: 85% o superior. Distingue cobertura global y del cambio; declara el método y sus límites.
