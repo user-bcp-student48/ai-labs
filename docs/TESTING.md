@@ -32,7 +32,10 @@ Cada fila indica el endpoint, el caso, su categoría y el resultado esperado doc
 | `POST /api/requirements` | Archivo vacío / archivo de exactamente 200 bytes | Borde | 201; tamaño 0 / 200 bytes. | H-API-04; `test_upload_accepts_empty_file`, `test_upload_accepts_file_at_size_limit` |
 | `POST /api/requirements` | Nombre sin extensión o extensión no permitida | Error | 400; `{"detail":"Unsupported file type"}`. | H-API-04; `test_upload_rejects_filename_without_extension`, `test_upload_rejects_non_txt_extension` |
 | `POST /api/requirements` | Nombre con ruta | Error/seguridad | 400; `{"detail":"Invalid file name"}` y sin escritura fuera del directorio. | H-API-04; `test_upload_rejects_path_like_filename` |
-| `POST /api/requirements` | Archivo mayor de 200 bytes | Error | 413; `{"detail":"File exceeds maximum size"}`. | H-API-04; `test_upload_rejects_file_over_limit` |
+| `POST /api/requirements` | Archivo mayor de 200 bytes con cuerpo total dentro de 512 bytes | Error | 413; `{"detail":"File exceeds maximum size"}`. | H-API-04; `test_upload_rejects_file_over_limit` |
+| `POST /api/requirements` | Cuerpo multipart de exactamente 512 bytes y archivo de 200 bytes | Borde | 201; se conserva el contenido del archivo. | H-API-08; `test_upload_accepts_request_at_body_limit` |
+| `POST /api/requirements` | Cuerpo multipart de 513 bytes | Error | 413; `{"detail":"Request body exceeds maximum size"}` y sin archivo almacenado. | H-API-08; `test_upload_rejects_request_over_body_limit` |
+| `POST /api/requirements` | Cuerpo transmitido en fragmentos sin `Content-Length` | Error | 413 al exceder el límite; el parser no recibe el fragmento que cruza el límite. | H-API-08; `test_upload_body_limit_counts_chunks_without_content_length` |
 | `POST /api/requirements` | Falta la parte `file` | Error | 422; error de campo multipart requerido. | H-API-04; `test_upload_requires_file_part` |
 | `POST /api/requirements` | Token inválido / configuración ausente | Error | 401 / 503 con los cuerpos comunes documentados. | H-API-01; `test_all_endpoints_reject_invalid_authentication[upload-requirement]`, `test_all_endpoints_fail_closed_without_jwt_configuration[upload-requirement]` |
 | `POST /api/requirements` | Destino de almacenamiento no escribible | Error | 500; texto `Internal Server Error`. | H-API-04; `test_upload_storage_failure_returns_generic_server_error` |

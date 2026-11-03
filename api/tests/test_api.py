@@ -1,3 +1,4 @@
+import asyncio
 import base64
 import hashlib
 import hmac
@@ -10,12 +11,13 @@ from unittest.mock import Mock
 import pytest
 from fastapi.testclient import TestClient
 
-from app.main import create_app
+from app.main import UploadRequestBodyLimitMiddleware, create_app
 
 TEST_JWT_KEY = b"0123456789abcdef0123456789abcdef"
 TEST_ISSUER = "ai-labs-api-tests"
 TEST_AUDIENCE = "ai-labs-api"
 TOKEN_LIFETIME_SECONDS = 3600
+TEST_MULTIPART_BOUNDARY = "ai-labs-test-boundary"
 
 
 @pytest.fixture(autouse=True)
@@ -56,6 +58,28 @@ def token(
 
 def headers(username: str = "student", role: str = "STUDENT") -> dict[str, str]:
     return {"Authorization": f"Bearer {token(username, role)}"}
+
+
+def multipart_body_of_size(total_size: int, file_content: bytes) -> bytes:
+    boundary = TEST_MULTIPART_BOUNDARY.encode()
+    file_part = (
+        b"--"
+        + boundary
+        + b'\r\nContent-Disposition: form-data; name="file"; filename="requirements.txt"\r\n'
+        + b"Content-Type: text/plain\r\n\r\n"
+        + file_content
+        + b"\r\n"
+    )
+    padding_part = (
+        b"--"
+        + boundary
+        + b'\r\nContent-Disposition: form-data; name="padding"\r\n\r\n'
+    )
+    closing_boundary = b"\r\n--" + boundary + b"--\r\n"
+    padding_size = total_size - len(file_part + padding_part + closing_boundary)
+    if padding_size < 0:
+        raise ValueError("Requested multipart body size is too small")
+    return file_part + padding_part + b"x" * padding_size + closing_boundary
 
 
 ENDPOINT_REQUESTS = (
@@ -320,6 +344,100 @@ def test_missing_jwt_configuration_fails_closed(
         response = client.get("/api/tasks", headers=headers())
     assert response.status_code == 503
     assert response.json()["detail"] == "Authentication is not configured"
+
+
+def test_upload_accepts_request_at_body_limit(tmp_path: Path) -> None:
+    content = b"x" * 200
+    upload_dir = tmp_path / "uploads"
+    app = create_app(str(tmp_path / "workshop.db"), str(upload_dir))
+    body = multipart_body_of_size(512, content)
+    request_headers = {
+        **headers(),
+        "Content-Type": f"multipart/form-data; boundary={TEST_MULTIPART_BOUNDARY}",
+    }
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/requirements",
+            headers=request_headers,
+            content=body,
+        )
+
+    assert len(body) == 512
+    assert response.status_code == 201
+    assert response.json()["size"] == 200
+    assert Path(response.json()["storedAt"]).read_bytes() == content
+
+
+def test_upload_rejects_request_over_body_limit(tmp_path: Path) -> None:
+    upload_dir = tmp_path / "uploads"
+    app = create_app(str(tmp_path / "workshop.db"), str(upload_dir))
+    body = multipart_body_of_size(513, b"valid requirement")
+    request_headers = {
+        **headers(),
+        "Content-Type": f"multipart/form-data; boundary={TEST_MULTIPART_BOUNDARY}",
+    }
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/requirements",
+            headers=request_headers,
+            content=body,
+        )
+
+    assert response.status_code == 413
+    assert response.json() == {"detail": "Request body exceeds maximum size"}
+    assert not any(path.is_file() for path in upload_dir.rglob("*"))
+
+
+def test_upload_body_limit_counts_chunks_without_content_length() -> None:
+    request_messages = [
+        {"type": "http.request", "body": b"x" * 256, "more_body": True},
+        {"type": "http.request", "body": b"x" * 257, "more_body": False},
+    ]
+    received_body = bytearray()
+    sent_messages: list[dict[str, Any]] = []
+    scope = {
+        "type": "http",
+        "method": "POST",
+        "path": "/api/requirements",
+        "headers": [],
+    }
+
+    async def receive() -> dict[str, Any]:
+        return request_messages.pop(0)
+
+    async def send(message: dict[str, Any]) -> None:
+        sent_messages.append(message)
+
+    async def downstream_app(scope, receive, send) -> None:
+        while True:
+            message = await receive()
+            received_body.extend(message.get("body", b""))
+            if not message.get("more_body", False):
+                break
+        await send({"type": "http.response.start", "status": 200, "headers": []})
+        await send({"type": "http.response.body", "body": b"ok"})
+
+    async def invoke_middleware() -> None:
+        middleware = UploadRequestBodyLimitMiddleware(downstream_app)
+        await middleware(scope, receive, send)
+
+    asyncio.run(invoke_middleware())
+
+    response_start = next(
+        message for message in sent_messages if message["type"] == "http.response.start"
+    )
+    response_body = b"".join(
+        message.get("body", b"")
+        for message in sent_messages
+        if message["type"] == "http.response.body"
+    )
+    assert response_start["status"] == 413
+    assert json.loads(response_body) == {
+        "detail": "Request body exceeds maximum size"
+    }
+    assert len(received_body) == 256
 
 
 def test_upload_accepts_file_at_size_limit(tmp_path: Path) -> None:

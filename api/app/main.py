@@ -12,7 +12,9 @@ import jwt
 import urllib3
 from fastapi import Depends, FastAPI, File, Header, HTTPException, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field
+from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 JWT_ALGORITHM = "HS256"
 JWT_SECRET_ENV = "AUTH_JWT_SECRET"
@@ -20,6 +22,8 @@ JWT_ISSUER_ENV = "AUTH_JWT_ISSUER"
 JWT_AUDIENCE_ENV = "AUTH_JWT_AUDIENCE"
 JWT_REQUIRED_CLAIMS = ("exp", "iss", "aud", "username", "role")
 JWT_MIN_SECRET_BYTES = 32
+UPLOAD_REQUEST_MAX_BYTES = 512
+UPLOAD_REQUEST_TOO_LARGE_DETAIL = "Request body exceeds maximum size"
 UPLOAD_MAX_BYTES = 200
 ALLOWED_UPLOAD_EXTENSIONS = frozenset({".txt"})
 NON_OPEN_TASK_STATUSES = frozenset({"DONE", "ARCHIVED"})
@@ -191,6 +195,68 @@ async def read_upload_limited(file: UploadFile) -> bytes:
             raise HTTPException(status_code=413, detail="File exceeds maximum size")
 
 
+class UploadRequestBodyTooLarge(Exception):
+    pass
+
+
+class UploadRequestBodyLimitMiddleware:
+    def __init__(self, app: ASGIApp) -> None:
+        self._app = app
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if (
+            scope["type"] != "http"
+            or scope["method"] != "POST"
+            or scope["path"] != "/api/requirements"
+        ):
+            await self._app(scope, receive, send)
+            return
+
+        content_length = next(
+            (
+                value
+                for name, value in scope["headers"]
+                if name.lower() == b"content-length"
+            ),
+            None,
+        )
+        if content_length is not None:
+            declared_length = content_length.lstrip(b"0") or b"0"
+            maximum_length = str(UPLOAD_REQUEST_MAX_BYTES).encode()
+            if declared_length.isdigit() and (
+                len(declared_length) > len(maximum_length)
+                or (
+                    len(declared_length) == len(maximum_length)
+                    and declared_length > maximum_length
+                )
+            ):
+                await self._reject(scope, receive, send)
+                return
+
+        received_bytes = 0
+
+        async def receive_with_limit() -> Message:
+            nonlocal received_bytes
+            message = await receive()
+            if message["type"] == "http.request":
+                received_bytes += len(message.get("body", b""))
+                if received_bytes > UPLOAD_REQUEST_MAX_BYTES:
+                    raise UploadRequestBodyTooLarge
+            return message
+
+        try:
+            await self._app(scope, receive_with_limit, send)
+        except UploadRequestBodyTooLarge:
+            await self._reject(scope, receive, send)
+
+    async def _reject(self, scope: Scope, receive: Receive, send: Send) -> None:
+        response = JSONResponse(
+            status_code=413,
+            content={"detail": UPLOAD_REQUEST_TOO_LARGE_DETAIL},
+        )
+        await response(scope, receive, send)
+
+
 def create_app(db_path: str | None = None, upload_dir: str | None = None) -> FastAPI:
     selected_db = db_path or os.getenv("WORKSHOP_DB_PATH", "./data/workshop.db")
     selected_uploads = upload_dir or os.getenv("WORKSHOP_UPLOAD_DIR", "./uploads")
@@ -211,6 +277,7 @@ def create_app(db_path: str | None = None, upload_dir: str | None = None) -> Fas
     app = FastAPI(title="Workshop Requirements API", version="0.1.0")
     app.state.connection = connection
     app.state.upload_dir = selected_uploads
+    app.add_middleware(UploadRequestBodyLimitMiddleware)
     app.add_middleware(
         CORSMiddleware,
         allow_origins=["*"],

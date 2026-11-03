@@ -293,6 +293,8 @@ El request usa `multipart/form-data`.
 | `Authorization` (header) | string, Bearer JWT | Sí | Token firmado y verificado por la API. |
 | `file` (parte multipart) | archivo | Sí | Nombre simple con extensión `.txt` y máximo 200 bytes. La comparación de extensión no distingue mayúsculas/minúsculas; no se valida el MIME type. |
 
+El cuerpo multipart completo, incluyendo delimitadores y cabeceras, no puede exceder 512 bytes.
+
 Ejemplo completo:
 
 ```bash
@@ -334,14 +336,16 @@ La ruta del ejemplo es ilustrativa; la respuesta contiene la ruta absoluta de la
 |---|---|---|
 | 400 | Nombre vacío o con separadores/ruta, o extensión distinta de `.txt`. | `{"detail":"Invalid file name"}` o `{"detail":"Unsupported file type"}` |
 | 401 | Falta el Bearer token, su formato es inválido, o la firma/claims no se validan. | `{"detail":"Invalid token"}` |
-| 413 | El archivo excede 200 bytes. | `{"detail":"File exceeds maximum size"}` |
+| 413 | El cuerpo multipart completo excede 512 bytes. | `{"detail":"Request body exceeds maximum size"}` |
+| 413 | El archivo excede 200 bytes y el cuerpo total no supera 512 bytes. | `{"detail":"File exceeds maximum size"}` |
 | 422 | Falta la parte multipart `file`. | `{"detail":[{"type":"missing","loc":["body","file"],"msg":"Field required","input":null}]}` |
 | 503 | Falta configuración JWT, issuer/audience no están configurados o el secreto tiene menos de 32 bytes. | `{"detail":"Authentication is not configured"}` |
 | 500 | Error interno no manejado al guardar el archivo. FastAPI/Starlette responde texto plano. | `Internal Server Error` |
 
 ### 6. Notas de seguridad
 
-- Se rechazan rutas, extensiones no permitidas y archivos mayores de 200 bytes (`api/app/main.py:163-191,247-258`).
+- El `UploadRequestBodyLimitMiddleware` limita el cuerpo completo de esta ruta antes del parseo multipart; el handler conserva la validación independiente de 200 bytes por archivo.
+- Se rechazan rutas, extensiones no permitidas y archivos mayores de 200 bytes (`api/app/main.py`).
 - El nombre se conserva dentro de un subdirectorio determinado por SHA-256 del `username` verificado; el username no se usa como segmento de ruta. Usuarios diferentes quedan aislados. El mismo usuario puede reemplazar su carga anterior si repite el nombre.
 - `storedAt` revela la ruta absoluta de almacenamiento del servidor.
 
