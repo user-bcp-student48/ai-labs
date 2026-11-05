@@ -26,3 +26,22 @@
 | H-API-05 | api | Dependencias fijadas en versiones candidatas a revisión SCA | Vulnerabilidad | Resuelto para los paquetes directos: `urllib3` se actualizó a 2.8.0 y `python-multipart` a 0.0.22 según advisories; PyJWT 2.15.1 se añadió para JWT. No se ejecutó un escaneo integral de transitivas. | api/requirements.txt:4-6 | media | Resuelto |
 | H-API-06 | api | Rutas, persistencia, reglas y serialización concentradas en un módulo | Refactor | La aplicación inicializa SQLite, transforma filas y define endpoints y reglas en el mismo archivo, dificultando aislar responsabilidades y probar cambios con seguridad. | api/app/main.py:29-56,67-125 | baja | Aprobado |
 | H-API-07 | api | Tipado crudo, excepciones amplias y lógica anidada | Refactor | Las rutas aceptan y devuelven diccionarios sin modelos, hay capturas amplias y condicionales anidados; esto reduce la validación del contrato y puede devolver detalles internos de errores al cliente. | api/app/main.py:17,25-26,56,78,91-105,115-121 | baja | Aprobado |
+
+## Contrato observado antes del cambio — auth
+
+`docs/ENDPOINTS.md` no documenta `POST /auth/login`; lo siguiente se deriva de `auth/src/main/java/com/bcp/workshop/auth/AuthResource.java`, `LegacyDatabase.java` y `LegacyTokenUtil.java`, y no representa un contrato acordado:
+
+- `POST /auth/login` acepta `username`, `password` y `client` opcional. Responde 200 con `token`, `expiresIn` (3600 fijo) y `user.username`, `user.displayName`, `user.role` cuando las credenciales coinciden contra `legacy_users`.
+- `username`/`password` ausentes o vacíos responden 400 con `message`. Credenciales que no coinciden responden 401 con `message`, incluyendo el `username` recibido.
+- Errores no controlados responden 500 con `message` y `exception` (nombre de la clase de la excepción).
+- El token es Base64 de `username|role|expiración|secreto`; el secreto está fijo en código (`LegacyTokenUtil.SECRET`) y no hay verificación de firma.
+- Las credenciales se almacenan y comparan en texto plano en SQLite (`legacy_users.password`).
+
+## Seguimiento — auth
+
+| id | componente | hallazgo | tipo | explicacion | evidencia (archivo:linea) | severidad | estado |
+|---|---|---|---|---|---|---|---|
+| H-AUTH-01 | auth | SQL de login concatena username/password | Vulnerabilidad | `findByCredentials` arma el SQL con concatenación de strings; una entrada con sintaxis SQL (por ejemplo `' OR '1'='1`) puede alterar la condición de búsqueda y autenticar sin conocer la contraseña real. Resuelto: la consulta usa `PreparedStatement` con parámetros; `rejectsSqlInjectionInPassword` falló antes (200) y pasa después (401). Issue #21 (campo Hallazgo origen = H-AUTH-01). | auth/src/main/java/com/bcp/workshop/auth/LegacyDatabase.java:32-46 | alta | Resuelto |
+| H-AUTH-02 | auth | Contraseñas almacenadas en texto plano | Vulnerabilidad | La tabla `legacy_users` guarda `password` sin hash ni salt; una lectura de la base expone credenciales reutilizables directamente, sin necesidad de romper ninguna protección adicional. Issue #22. | auth/src/main/java/com/bcp/workshop/auth/LegacyDatabase.java:22-24 | alta | Confirmado |
+| H-AUTH-03 | auth | Token sin firma criptográfica y secreto embebido | Vulnerabilidad | El token es Base64 de campos separados por `\|` más un secreto constante en código; Base64 no aporta integridad (no es firma) y el secreto no es verificable, rotable ni externalizable. Issue #24. | auth/src/main/java/com/bcp/workshop/auth/LegacyTokenUtil.java:8,15 | alta | Confirmado |
+| H-AUTH-04 | auth | Respuesta 500 expone mensaje y clase de excepción | Vulnerabilidad | El manejador de errores de `/auth/login` devuelve `error.getMessage()` y `error.getClass().getName()` al cliente, filtrando detalles internos de implementación ante fallos no controlados. Issue #23. | auth/src/main/java/com/bcp/workshop/auth/AuthResource.java:54-57 | media | Confirmado |
