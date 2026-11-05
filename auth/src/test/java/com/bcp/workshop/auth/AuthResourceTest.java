@@ -69,4 +69,30 @@ class AuthResourceTest {
                 .statusCode(401)
                 .body("token", nullValue());
     }
+
+    // spec auth-login, "Username ausente": falta username responde 400 sin consultar credenciales
+    @Test
+    void rejectsMissingUsernameWithBadRequest() {
+        given()
+                .contentType("application/json")
+                .body("{\"password\":\"Workshop123!\"}")
+                .when().post("/auth/login")
+                .then()
+                .statusCode(400)
+                .body("message", is("Username is required"))
+                .body("token", nullValue());
+    }
+
+    // spec auth-login, "Password vacío": password en blanco responde 400 sin consultar credenciales
+    @Test
+    void rejectsBlankPasswordWithBadRequest() {
+        given()
+                .contentType("application/json")
+                .body("{\"username\":\"student\",\"password\":\"   \"}")
+                .when().post("/auth/login")
+                .then()
+                .statusCode(400)
+                .body("message", is("Password is required"))
+                .body("token", nullValue());
+    }
 }
